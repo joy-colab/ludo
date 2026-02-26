@@ -1,3 +1,4 @@
+# ludo_streamlit_app.py
 import streamlit as st
 from streamlit.components.v1 import html as st_html
 
@@ -13,8 +14,9 @@ prob_temp = st.sidebar.slider("Softmax temperature", min_value=0.2, max_value=5.
 st.sidebar.markdown("---")
 st.sidebar.markdown("Click any piece on the board to show its ahead/behind analysis. Drag pieces to move them. Use the number buttons to step pieces by 1..6.")
 
-# The full HTML+JS/CSS from your app (with the "pieces-live count" removed). We inject the sidebar values so the embedded page starts with the same method & temperature.
-html_app = f'''
+# Use a plain (non-f) triple-quoted string for the HTML/JS to avoid Python f-string interpolation issues.
+# Placeholders __PROB_METHOD__ and __PROB_TEMP__ will be replaced below.
+html_template = r'''
 <!doctype html>
 <html lang="en">
 <head>
@@ -22,7 +24,7 @@ html_app = f'''
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Ludo — Score panel with color sums + probabilities in sidebar</title>
 <style>
-:root{{
+:root{
   --size:820px;
   --cells:15;
   --cell: calc(var(--size)/var(--cells));
@@ -39,15 +41,15 @@ html_app = f'''
   --row-hover: rgba(99,102,241,0.06);
   --good: #10b981;
   --danger: #ef4444;
-}}
+}
 
 /* global reset */
-*{{box-sizing:border-box}}
-body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}}
-.wrap{{padding:12px; display:flex; gap:18px; align-items:flex-start;}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+.wrap{padding:12px; display:flex; gap:18px; align-items:flex-start;}
 
 /* score panel (left) */
-.score-panel{{
+.score-panel{
   width:var(--score-w);
   background: linear-gradient(180deg,#ffffff,#fbfdff);
   border-radius:12px;
@@ -56,50 +58,50 @@ body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:
   border:1px solid rgba(15,23,42,0.04);
   max-height: calc(100vh - 64px);
   overflow:auto;
-}}
-.score-panel h3{{ margin:6px 0 10px 0; font-size:15px; display:flex; align-items:center; gap:8px; }}
-.score-row{{ display:flex; align-items:center; justify-content:space-between; padding:8px; border-radius:8px; margin-bottom:8px; background:linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,251,255,0.9)); }}
-.score-left{{ display:flex; gap:10px; align-items:center; }}
-.color-dot-small{{ width:12px; height:12px; border-radius:3px; box-shadow:0 6px 14px rgba(2,6,23,0.06);}}
-.score-meta{{ font-size:12px; color:var(--muted); }}
-.score-val{{ font-weight:900; font-size:14px; }}
+}
+.score-panel h3{ margin:6px 0 10px 0; font-size:15px; display:flex; align-items:center; gap:8px; }
+.score-row{ display:flex; align-items:center; justify-content:space-between; padding:8px; border-radius:8px; margin-bottom:8px; background:linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,251,255,0.9)); }
+.score-left{ display:flex; gap:10px; align-items:center; }
+.color-dot-small{ width:12px; height:12px; border-radius:3px; box-shadow:0 6px 14px rgba(2,6,23,0.06);}
+.score-meta{ font-size:12px; color:var(--muted); }
+.score-val{ font-weight:900; font-size:14px; }
 
 /* color totals */
-.totals-wrap{{ margin-bottom:10px; padding:8px; border-radius:10px; background:linear-gradient(180deg,#f8fbff,#ffffff); border:1px solid rgba(99,102,241,0.04); }}
-.totals-row{{ display:flex; align-items:center; justify-content:space-between; padding:6px 4px; border-radius:6px; margin-bottom:6px; }}
-.totals-row .label{{ font-weight:700; font-size:13px; }}
-.totals-row .val{{ font-weight:900; font-size:13px; }}
+.totals-wrap{ margin-bottom:10px; padding:8px; border-radius:10px; background:linear-gradient(180deg,#f8fbff,#ffffff); border:1px solid rgba(99,102,241,0.04); }
+.totals-row{ display:flex; align-items:center; justify-content:space-between; padding:6px 4px; border-radius:6px; margin-bottom:6px; }
+.totals-row .label{ font-weight:700; font-size:13px; }
+.totals-row .val{ font-weight:900; font-size:13px; }
 
 /* board unchanged */
-.board{{ width:var(--size); height:var(--size); display:grid; grid-template-columns:repeat(var(--cells),1fr); grid-template-rows:repeat(var(--cells),1fr); border:6px solid var(--border); position:relative; overflow:hidden; background:linear-gradient(0deg, rgba(0,0,0,0.01) 0%, rgba(0,0,0,0.00) 0%); }}
-.cell{{position:relative;border:1px solid rgba(0,0,0,0.04); background:transparent; width:100%; height:100%}}
+.board{ width:var(--size); height:var(--size); display:grid; grid-template-columns:repeat(var(--cells),1fr); grid-template-rows:repeat(var(--cells),1fr); border:6px solid var(--border); position:relative; overflow:hidden; background:linear-gradient(0deg, rgba(0,0,0,0.01) 0%, rgba(0,0,0,0.00) 0%); }
+.cell{position:relative;border:1px solid rgba(0,0,0,0.04); background:transparent; width:100%; height:100%}
 
 /* existing visuals kept (quadrants, tracks, pieces, etc.) */
-.quad-red{{ background:#ef4444 }} .quad-green{{ background:#10b981 }} .quad-blue{{ background:#2563eb }} .quad-yellow{{ background:#f59e0b }}
-.track{{ background:#ffffff }} .track.alt{{ background:#f0f2f4 }}
-.safe-badge{{ position:absolute; width:20px; height:20px; border-radius:50%; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:14px; color:#222; box-shadow:0 6px 12px rgba(2,6,23,0.12); right:6px; top:6px; z-index:6; pointer-events:none; }}
-.path-number{{ position:absolute; z-index:18; left:6px; top:6px; min-width:20px; height:20px; padding:0 6px; line-height:20px; border-radius:12px; background:rgba(0,0,0,0.75); color:#fff; font-size:12px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; pointer-events:none; box-shadow:0 6px 14px rgba(2,6,23,0.24); opacity:0.92; }}
-.path-number.red{{ background: rgba(239,68,68,0.92); }} .path-number.green{{ background: rgba(16,185,129,0.92); }} .path-number.blue{{ background: rgba(37,99,235,0.92); }} .path-number.yellow{{ background: rgba(245,158,11,0.92); }}
-.path-number.home{{ box-shadow:0 8px 18px rgba(0,0,0,0.28); transform:scale(1.02); font-size:12px; }}
-.coord-badge{{ position:absolute; z-index:20; left:6px; bottom:6px; padding:3px 6px; border-radius:7px; background:rgba(0,0,0,0.72); color:#fff; font-size:11px; font-weight:700; line-height:1; pointer-events:none; opacity:0; transform:translateY(4px); transition:opacity .12s ease, transform .12s ease; }}
-.cell:hover .coord-badge{{ opacity:1; transform:translateY(0); }}
-.overlay{{ position:absolute; pointer-events:none; z-index:2; }}
-.home-plate{{ width: calc(var(--cell)*4 - 18px); height: calc(var(--cell)*4 - 18px); border-radius:18px; background:#fff; box-shadow:0 10px 28px rgba(2,6,23,0.08); display:flex; align-items:center; justify-content:center; padding:14px; }}
-.dots{{ width:78%; height:78%; display:grid; grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr); gap:12px }} .dot{{ border-radius:50%; background:currentColor; box-shadow:0 8px 18px rgba(2,6,23,0.12) }}
-.center-tile{{ position:absolute; width: calc(var(--cell) - 6px); height: calc(var(--cell) - 6px); box-sizing:border-box; border-radius:6px; box-shadow: 0 6px 18px rgba(2,6,23,0.06); z-index:2; border: 2px solid rgba(255,255,255,0.6); }}
+.quad-red{ background:#ef4444 } .quad-green{ background:#10b981 } .quad-blue{ background:#2563eb } .quad-yellow{ background:#f59e0b }
+.track{ background:#ffffff } .track.alt{ background:#f0f2f4 }
+.safe-badge{ position:absolute; width:20px; height:20px; border-radius:50%; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:14px; color:#222; box-shadow:0 6px 12px rgba(2,6,23,0.12); right:6px; top:6px; z-index:6; pointer-events:none; }
+.path-number{ position:absolute; z-index:18; left:6px; top:6px; min-width:20px; height:20px; padding:0 6px; line-height:20px; border-radius:12px; background:rgba(0,0,0,0.75); color:#fff; font-size:12px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; pointer-events:none; box-shadow:0 6px 14px rgba(2,6,23,0.24); opacity:0.92; }
+.path-number.red{ background: rgba(239,68,68,0.92); } .path-number.green{ background: rgba(16,185,129,0.92); } .path-number.blue{ background: rgba(37,99,235,0.92); } .path-number.yellow{ background: rgba(245,158,11,0.92); }
+.path-number.home{ box-shadow:0 8px 18px rgba(0,0,0,0.28); transform:scale(1.02); font-size:12px; }
+.coord-badge{ position:absolute; z-index:20; left:6px; bottom:6px; padding:3px 6px; border-radius:7px; background:rgba(0,0,0,0.72); color:#fff; font-size:11px; font-weight:700; line-height:1; pointer-events:none; opacity:0; transform:translateY(4px); transition:opacity .12s ease, transform .12s ease; }
+.cell:hover .coord-badge{ opacity:1; transform:translateY(0); }
+.overlay{ position:absolute; pointer-events:none; z-index:2; }
+.home-plate{ width: calc(var(--cell)*4 - 18px); height: calc(var(--cell)*4 - 18px); border-radius:18px; background:#fff; box-shadow:0 10px 28px rgba(2,6,23,0.08); display:flex; align-items:center; justify-content:center; padding:14px; }
+.dots{ width:78%; height:78%; display:grid; grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr); gap:12px } .dot{ border-radius:50%; background:currentColor; box-shadow:0 8px 18px rgba(2,6,23,0.12) }
+.center-tile{ position:absolute; width: calc(var(--cell) - 6px); height: calc(var(--cell) - 6px); box-sizing:border-box; border-radius:6px; box-shadow: 0 6px 18px rgba(2,6,23,0.06); z-index:2; border: 2px solid rgba(255,255,255,0.6); }
 
 /* pieces unchanged */
-.piece{{ position:absolute; width: calc(var(--cell)*0.68); height: calc(var(--cell)*0.68); border-radius:50%; transform:translate(-50%,-50%); border:3px solid #fff; box-shadow:0 12px 30px rgba(2,6,23,0.18); cursor:grab; z-index:40; transition:left 120ms cubic-bezier(.2,.9,.2,1), top 120ms cubic-bezier(.2,.9,.2,1); display:flex; align-items:center; justify-content:center; user-select:none; overflow:visible; }}
-.piece:active{{ cursor:grabbing; transform:translate(-50%,-50%) scale(.99); }} .piece.selected{{ box-shadow:0 0 0 8px rgba(99,102,241,0.12), 0 16px 36px rgba(2,6,23,0.26) }}
-.piece .inner-label{{ position:relative; z-index:2; font-size:14px; font-weight:800; line-height:1; pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,0.45); color:rgba(255,255,255,0.98); }}
-.piece .count-label{{ position:absolute; z-index:45; top:6px; right:6px; min-width:22px; height:22px; line-height:22px; border-radius:11px; background:rgba(0,0,0,0.86); color:#fff; font-weight:800; font-size:11px; display:flex; align-items:center; justify-content:center; pointer-events:none; box-shadow:0 6px 18px rgba(2,6,23,0.26); border:1px solid rgba(255,255,255,0.06); }}
+.piece{ position:absolute; width: calc(var(--cell)*0.68); height: calc(var(--cell)*0.68); border-radius:50%; transform:translate(-50%,-50%); border:3px solid #fff; box-shadow:0 12px 30px rgba(2,6,23,0.18); cursor:grab; z-index:40; transition:left 120ms cubic-bezier(.2,.9,.2,1), top 120ms cubic-bezier(.2,.9,.2,1); display:flex; align-items:center; justify-content:center; user-select:none; overflow:visible; }
+.piece:active{ cursor:grabbing; transform:translate(-50%,-50%) scale(.99); } .piece.selected{ box-shadow:0 0 0 8px rgba(99,102,241,0.12), 0 16px 36px rgba(2,6,23,0.26) }
+.piece .inner-label{ position:relative; z-index:2; font-size:14px; font-weight:800; line-height:1; pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,0.45); color:rgba(255,255,255,0.98); }
+.piece .count-label{ position:absolute; z-index:45; top:6px; right:6px; min-width:22px; height:22px; line-height:22px; border-radius:11px; background:rgba(0,0,0,0.86); color:#fff; font-weight:800; font-size:11px; display:flex; align-items:center; justify-content:center; pointer-events:none; box-shadow:0 6px 18px rgba(2,6,23,0.26); border:1px solid rgba(255,255,255,0.06); }
 
 /* route / behind markers unchanged */
-.route-dot{{ position:absolute; width:14px; height:14px; border-radius:3px; opacity:0.9; transform:translate(-50%,-50%); pointer-events:none; z-index:25; box-shadow:0 6px 14px rgba(0,0,0,0.12); border:1px solid rgba(255,255,255,0.4); }}
-.behind-dot{{ position:absolute; width:18px; height:18px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; z-index:45; box-shadow:0 10px 22px rgba(0,0,0,0.18); border:2px solid rgba(255,255,255,0.9); opacity:0.98; }}
+.route-dot{ position:absolute; width:14px; height:14px; border-radius:3px; opacity:0.9; transform:translate(-50%,-50%); pointer-events:none; z-index:25; box-shadow:0 6px 14px rgba(0,0,0,0.12); border:1px solid rgba(255,255,255,0.4); }
+.behind-dot{ position:absolute; width:18px; height:18px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; z-index:45; box-shadow:0 10px 22px rgba(0,0,0,0.18); border:2px solid rgba(255,255,255,0.9); opacity:0.98; }
 
 /* ==================== SIDEBAR — refreshed UI (right) ==================== */
-.scoreboard{{
+.scoreboard{
   width:var(--panel-w);
   background: linear-gradient(180deg, var(--panel-bg-top), var(--panel-bg-bot));
   border-radius:14px;
@@ -109,11 +111,11 @@ body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:
   overflow:auto;
   max-height: calc(100vh - 64px);
   border: 1px solid rgba(99,102,241,0.06);
-}}
+}
 
 /* top control row — modern buttons */
-.controls{{ display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; justify-content:flex-start; }}
-.controls button{{
+.controls{ display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; justify-content:flex-start; }
+.controls button{
   padding:9px 12px;
   font-weight:700;
   border-radius:10px;
@@ -125,17 +127,17 @@ body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:
   align-items:center;
   gap:8px;
   font-size:13px;
-}}
-.controls button:active{{ transform:translateY(1px) scale(.998); }}
-.controls button:hover{{ box-shadow: 0 18px 40px rgba(2,6,23,0.06); opacity:0.98; }}
+}
+.controls button:active{ transform:translateY(1px) scale(.998); }
+.controls button:hover{ box-shadow: 0 18px 40px rgba(2,6,23,0.06); opacity:0.98; }
 
-.btn-red{{ background: linear-gradient(90deg,#f87171,#ef4444); color:#fff; }}
-.btn-green{{ background: linear-gradient(90deg,#34d399,#10b981); color:#fff; }}
-.btn-blue{{ background: linear-gradient(90deg,#60a5fa,#2563eb); color:#fff; }}
-.btn-yellow{{ background: linear-gradient(90deg,#fbbf24,#f59e0b); color:#111; }}
-#btn-clear{{ background:transparent; border:1px solid rgba(15,23,42,0.06); color:var(--muted); padding:8px 10px; border-radius:10px; }}
+.btn-red{ background: linear-gradient(90deg,#f87171,#ef4444); color:#fff; }
+.btn-green{ background: linear-gradient(90deg,#34d399,#10b981); color:#fff; }
+.btn-blue{ background: linear-gradient(90deg,#60a5fa,#2563eb); color:#fff; }
+.btn-yellow{ background: linear-gradient(90deg,#fbbf24,#f59e0b); color:#111; }
+#btn-clear{ background:transparent; border:1px solid rgba(15,23,42,0.06); color:var(--muted); padding:8px 10px; border-radius:10px; }
 
-.step-btn{{
+.step-btn{
   min-width:36px;
   height:36px;
   border-radius:10px;
@@ -149,55 +151,55 @@ body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:
   cursor:pointer;
   padding:0 10px;
   box-shadow: 0 6px 18px rgba(2,6,23,0.04);
-}}
-.step-btn:hover{{ transform:translateY(-2px); box-shadow: 0 18px 40px rgba(2,6,23,0.06); }}
-.step-btn.active{{ box-shadow: 0 18px 40px rgba(99,102,241,0.12); transform:translateY(-2px); outline: 3px solid rgba(99,102,241,0.08); }}
+}
+.step-btn:hover{ transform:translateY(-2px); box-shadow: 0 18px 40px rgba(2,6,23,0.06); }
+.step-btn.active{ box-shadow: 0 18px 40px rgba(99,102,241,0.12); transform:translateY(-2px); outline: 3px solid rgba(99,102,241,0.08); }
 
-.scoreboard h3{{
+.scoreboard h3{
   margin:6px 0 10px 0;
   font-size:15px;
   letter-spacing:0.2px;
-  display:flex; 
+  display:flex;
   align-items:center;
   gap:10px;
-}}
-.scoreboard h3:before{{
+}
+.scoreboard h3:before{
   content: '';
   display:inline-block;
   width:10px; height:10px;
   border-radius:3px;
   background: linear-gradient(180deg, var(--accent), #4f46e5);
   box-shadow: 0 6px 14px rgba(99,102,241,0.12);
-}}
+}
 
 /* probability panel in sidebar */
-.prob-panel{{ margin-top:10px; padding:10px; border-radius:12px; background: linear-gradient(180deg,#fff,#fbfdff); border:1px solid rgba(15,23,42,0.04); }}
-.prob-row{{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }}
-.prob-label{{ width:68px; font-weight:800; font-size:13px; display:flex; align-items:center; gap:8px; }}
-.prob-bar{{ flex:1; height:14px; border-radius:10px; background:linear-gradient(90deg, rgba(15,23,42,0.06), rgba(15,23,42,0.03)); overflow:hidden; border:1px solid rgba(15,23,42,0.03); }}
-.prob-fill{{ height:100%; width:0%; border-radius:10px; transition: width .26s ease; box-shadow: inset 0 -6px 10px rgba(0,0,0,0.06); }}
-.prob-pct{{ width:46px; text-align:right; font-weight:900; font-size:13px; }}
+.prob-panel{ margin-top:10px; padding:10px; border-radius:12px; background: linear-gradient(180deg,#fff,#fbfdff); border:1px solid rgba(15,23,42,0.04); }
+.prob-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.prob-label{ width:68px; font-weight:800; font-size:13px; display:flex; align-items:center; gap:8px; }
+.prob-bar{ flex:1; height:14px; border-radius:10px; background:linear-gradient(90deg, rgba(15,23,42,0.06), rgba(15,23,42,0.03)); overflow:hidden; border:1px solid rgba(15,23,42,0.03); }
+.prob-fill{ height:100%; width:0%; border-radius:10px; transition: width .26s ease; box-shadow: inset 0 -6px 10px rgba(0,0,0,0.06); }
+.prob-pct{ width:46px; text-align:right; font-weight:900; font-size:13px; }
 
-.fill-red{{ background: linear-gradient(90deg,#fb7185,#ef4444); }}
-.fill-green{{ background: linear-gradient(90deg,#34d399,#10b981); }}
-.fill-blue{{ background: linear-gradient(90deg,#60a5fa,#2563eb); }}
-.fill-yellow{{ background: linear-gradient(90deg,#fbbf24,#f59e0b); }}
+.fill-red{ background: linear-gradient(90deg,#fb7185,#ef4444); }
+.fill-green{ background: linear-gradient(90deg,#34d399,#10b981); }
+.fill-blue{ background: linear-gradient(90deg,#60a5fa,#2563eb); }
+.fill-yellow{ background: linear-gradient(90deg,#fbbf24,#f59e0b); }
 
-.note{{ font-size:12px; color:var(--muted); margin-top:8px; }}
+.note{ font-size:12px; color:var(--muted); margin-top:8px; }
 
-.behind-panel{{ margin-top:10px; padding:10px; border-radius:12px; background: linear-gradient(180deg,#f8fbff,#ffffff); box-shadow:0 8px 30px rgba(2,6,23,0.03); border:1px solid rgba(99,102,241,0.04); }}
-.behind-panel h4{{ margin:0 0 8px 0; font-size:14px; display:flex; align-items:center; gap:8px; font-weight:800; color:#0f172a; }}
-.behind-row{{ display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:10px; background:rgba(255,255,255,0.95); margin-bottom:8px; font-weight:700; box-shadow:0 4px 14px rgba(2,6,23,0.02); }}
-.behind-row div {{ display:flex; align-items:center; gap:8px; }}
-.behind-row .count {{ font-weight:900; color:#0f172a; }}
+.behind-panel{ margin-top:10px; padding:10px; border-radius:12px; background: linear-gradient(180deg,#f8fbff,#ffffff); box-shadow:0 8px 30px rgba(2,6,23,0.03); border:1px solid rgba(99,102,241,0.04); }
+.behind-panel h4{ margin:0 0 8px 0; font-size:14px; display:flex; align-items:center; gap:8px; font-weight:800; color:#0f172a; }
+.behind-row{ display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:10px; background:rgba(255,255,255,0.95); margin-bottom:8px; font-weight:700; box-shadow:0 4px 14px rgba(2,6,23,0.02); }
+.behind-row div { display:flex; align-items:center; gap:8px; }
+.behind-row .count { font-weight:900; color:#0f172a; }
 
-.small-muted{{ font-size:12px; color:var(--muted); }}
+.small-muted{ font-size:12px; color:var(--muted); }
 
-@media (max-width:1200px){{
-  :root{{ --size:520px }} 
-  .wrap{{ flex-direction:column; align-items:center;}}
-  .score-panel, .scoreboard{{ width:96%; max-width:480px; }}
-}}
+@media (max-width:1200px){
+  :root{ --size:520px } 
+  .wrap{ flex-direction:column; align-items:center;}
+  .score-panel, .scoreboard{ width:96%; max-width:480px; }
+}
 </style>
 </head>
 <body>
@@ -335,9 +337,9 @@ const N = 15;
 const cells = [];
 
 /* create grid cells */
-for(let r=0;r<N;r++){{
+for(let r=0;r<N;r++){
   cells[r]=[];
-  for(let c=0;c<N;c++){{
+  for(let c=0;c<N;c++){
     const el = document.createElement('div');
     el.className = 'cell';
     el.dataset.r = r; el.dataset.c = c;
@@ -346,23 +348,23 @@ for(let r=0;r<N;r++){{
 
     const coord = document.createElement('div');
     coord.className = 'coord-badge';
-    coord.innerText = `${{r}},${{c}}`;
+    coord.innerText = `${r},${c}`;
     el.appendChild(coord);
 
     BOARD.appendChild(el);
     cells[r][c] = el;
-  }}
-}}
+  }
+}
 
 /* paint quads and track */
-function paintQuads(){{
+function paintQuads(){
   for(let r=0;r<=5;r++) for(let c=0;c<=5;c++) cells[r][c].classList.add('quad-red');
   for(let r=0;r<=5;r++) for(let c=9;c<=14;c++) cells[r][c].classList.add('quad-green');
   for(let r=9;r<=14;r++) for(let c=9;c<=14;c++) cells[r][c].classList.add('quad-blue');
   for(let r=9;r<=14;r++) for(let c=0;c<=5;c++) cells[r][c].classList.add('quad-yellow');
-}}
+}
 
-function paintTrack(){{
+function paintTrack(){
   const centerBlocked = new Set([
     '6,6','6,7','6,8',
     '7,6','7,7','7,8',
@@ -375,17 +377,17 @@ function paintTrack(){{
   for(let c=13;c>=0;c--) coords.push([8,c]);
   for(let r=7;r>=1;r--) coords.push([r,6]);
 
-  coords.forEach((coord,i)=>{{
+  coords.forEach((coord,i)=>{
     const [r,c] = coord;
-    const key = `${{r}},${{c}}`;
+    const key = `${r},${c}`;
     if(centerBlocked.has(key)) return;
     const el = cells[r][c];
     el.classList.add('track');
     if(i%2===0) el.classList.add('alt');
-  }});
+  });
 
   const starPositions = [[1,8],[1,6],[6,1],[8,1],[13,6],[13,8],[8,13],[6,13]];
-  starPositions.forEach(([r,c])=>{{
+  starPositions.forEach(([r,c])=>{
     const cell = cells[r][c];
     if(!cell) return;
     const badge = document.createElement('div');
@@ -393,72 +395,72 @@ function paintTrack(){{
     badge.innerHTML = '★';
     badge.style.opacity = 0.95;
     cell.appendChild(badge);
-  }});
-}}
+  });
+}
 
 /* overlays & center tiles */
-function placeHomePlates(){{
+function placeHomePlates(){
   const plates = [
-    {{r:1,c:1,color:'#ef4444'}},
-    {{r:1,c:10,color:'#10b981'}},
-    {{r:10,c:10,color:'#2563eb'}},
-    {{r:10,c:1,color:'#f59e0b'}}
+    {r:1,c:1,color:'#ef4444'},
+    {r:1,c:10,color:'#10b981'},
+    {r:10,c:10,color:'#2563eb'},
+    {r:10,c:1,color:'#f59e0b'}
   ];
-  plates.forEach(p=>{{
+  plates.forEach(p=>{
     const ov = document.createElement('div'); ov.className='overlay';
-    ov.style.gridColumn = `${{p.c+1}} / ${{p.c+1+4}}`;
-    ov.style.gridRow    = `${{p.r+1}} / ${{p.r+1+4}}`;
+    ov.style.gridColumn = `${p.c+1} / ${p.c+1+4}`;
+    ov.style.gridRow    = `${p.r+1} / ${p.r+1+4}`;
     const plate = document.createElement('div'); plate.className='home-plate'; plate.style.color = p.color;
     const dotsWrap = document.createElement('div'); dotsWrap.className='dots';
-    for(let i=0;i<4;i++){{ const d = document.createElement('div'); d.className='dot'; dotsWrap.appendChild(d); }}
+    for(let i=0;i<4;i++){ const d = document.createElement('div'); d.className='dot'; dotsWrap.appendChild(d); }
     plate.appendChild(dotsWrap); ov.appendChild(plate); BOARD.appendChild(ov);
-  }});
-}}
+  });
+}
 
-function placeCenterTiles(){{
+function placeCenterTiles(){
   const centerMap = [
-    {{r:6,c:6,color:'#2563eb'}}, {{r:6,c:7,color:'#ef4444'}}, {{r:7,c:6,color:'#f59e0b'}}, {{r:7,c:7,color:'#10b981'}},
-    {{r:8,c:8,color:'#2563eb'}},{{r:7,c:8,color:'#ef4444'}},{{r:6,c:8,color:'#f59e0b'}},{{r:8,c:6,color:'#10b981'}},
-    {{r:8,c:7,color:'#f59e0b'}},{{r:7,c:10,color:'#2563eb'}},{{r:7,c:9,color:'#2563eb'}},{{r:7,c:11,color:'#2563eb'}},
-    {{r:7,c:12,color:'#2563eb'}},{{r:7,c:13,color:'#2563eb'}},{{r:6,c:1,color:'#ef4444'}},{{r:9,c:7,color:'#f59e0b'}},
-    {{r:10,c:7,color:'#f59e0b'}},{{r:11,c:7,color:'#f59e0b'}},{{r:12,c:7,color:'#f59e0b'}},{{r:13,c:7,color:'#f59e0b'}},
-    {{r:1,c:8,color:'#10b981'}},{{r:7,c:1,color:'#ef4444'}},{{r:7,c:2,color:'#ef4444'}},{{r:7,c:3,color:'#ef4444'}},
-    {{r:7,c:4,color:'#ef4444'}},{{r:7,c:5,color:'#ef4444'}},{{r:13,c:6,color:'#f59e0b'}},{{r:1,c:7,color:'#10b981'}},
-    {{r:2,c:7,color:'#10b981'}},{{r:3,c:7,color:'#10b981'}},{{r:4,c:7,color:'#10b981'}},{{r:5,c:7,color:'#10b981'}},
-    {{r:8,c:13,color:'#2563eb'}}
+    {r:6,c:6,color:'#2563eb'}, {r:6,c:7,color:'#ef4444'}, {r:7,c:6,color:'#f59e0b'}, {r:7,c:7,color:'#10b981'},
+    {r:8,c:8,color:'#2563eb'},{r:7,c:8,color:'#ef4444'},{r:6,c:8,color:'#f59e0b'},{r:8,c:6,color:'#10b981'},
+    {r:8,c:7,color:'#f59e0b'},{r:7,c:10,color:'#2563eb'},{r:7,c:9,color:'#2563eb'},{r:7,c:11,color:'#2563eb'},
+    {r:7,c:12,color:'#2563eb'},{r:7,c:13,color:'#2563eb'},{r:6,c:1,color:'#ef4444'},{r:9,c:7,color:'#f59e0b'},
+    {r:10,c:7,color:'#f59e0b'},{r:11,c:7,color:'#f59e0b'},{r:12,c:7,color:'#f59e0b'},{r:13,c:7,color:'#f59e0b'},
+    {r:1,c:8,color:'#10b981'},{r:7,c:1,color:'#ef4444'},{r:7,c:2,color:'#ef4444'},{r:7,c:3,color:'#ef4444'},
+    {r:7,c:4,color:'#ef4444'},{r:7,c:5,color:'#ef4444'},{r:13,c:6,color:'#f59e0b'},{r:1,c:7,color:'#10b981'},
+    {r:2,c:7,color:'#10b981'},{r:3,c:7,color:'#10b981'},{r:4,c:7,color:'#10b981'},{r:5,c:7,color:'#10b981'},
+    {r:8,c:13,color:'#2563eb'}
   ];
-  centerMap.forEach(m=>{{
+  centerMap.forEach(m=>{
     const el = document.createElement('div'); el.className='center-tile';
     const leftPercent = (m.c / N) * 100; const topPercent = (m.r / N) * 100;
     el.style.left = `calc(${leftPercent}% + 3px)`; el.style.top = `calc(${topPercent}% + 3px)`;
     el.style.background = m.color; BOARD.appendChild(el);
-  }});
-}}
+  });
+}
 
 /* ---------- Discover mainPath by walking painted track cells ---------- */
-function buildMainPathFromTrack(){{
+function buildMainPathFromTrack(){
   const trackSet = new Set();
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(cells[r][c].classList.contains('track')) trackSet.add(`${{r}},${{c}}`);
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(cells[r][c].classList.contains('track')) trackSet.add(`${r},${c}`);
   if(trackSet.size === 0) return [];
 
   let start = null;
   const candidates = Array.from(trackSet).map(s => s.split(',').map(Number));
   const topRow6 = candidates.filter(([r,c]) => r === 6).sort((a,b)=>a[1]-b[1]);
   if(topRow6.length) start = topRow6[0];
-  else {{ candidates.sort((a,b)=> a[0]-b[0] || a[1]-b[1]); start = candidates[0]; }}
+  else { candidates.sort((a,b)=> a[0]-b[0] || a[1]-b[1]); start = candidates[0]; }
 
-  const key = p => `${{p[0]}},${{p[1]}}`;
-  const neighborsOf = p => {{
+  const key = p => `${p[0]},${p[1]}`;
+  const neighborsOf = p => {
     const [r,c] = p;
-    return [[r,c-1],[r+1,c],[r,c+1],[r-1,c]].filter(([rr,cc]) => trackSet.has(`${{rr}},${{cc}}`));
-  }};
+    return [[r,c-1],[r+1,c],[r,c+1],[r-1,c]].filter(([rr,cc]) => trackSet.has(`${rr},${cc}`));
+  };
 
   const visited = new Set();
   const path = [];
   let cur = start.slice();
   let prev = null;
   let guard = 0;
-  while(true){{
+  while(true){
     path.push(cur.slice()); visited.add(key(cur));
     const neigh = neighborsOf(cur).filter(n => key(n) !== (prev?key(prev):null));
     let next = neigh.find(x => !visited.has(key(x)));
@@ -467,106 +469,106 @@ function buildMainPathFromTrack(){{
     prev = cur.slice(); cur = next.slice();
     if(key(cur) === key(start)) break;
     if(++guard > 200) break;
-  }}
+  }
   return path;
-}}
+}
 
 /* ---------- Path configuration ---------- */
 let mainPath = [];
-let ENTRY_INDEX = {{}};
+let ENTRY_INDEX = {};
 
-const homeStretches = {{
+const homeStretches = {
   red:    [[6,1],[6,2],[6,3],[6,4],[6,5],[6,6]],
   green:  [[1,8],[2,8],[3,8],[4,8],[5,8],[6,8]],
   blue:   [[8,13],[8,12],[8,11],[8,10],[8,9],[8,8]],
   yellow: [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]]
-}};
+};
 
-function computeMainPathAndEntries(){{
+function computeMainPathAndEntries(){
   mainPath = buildMainPathFromTrack();
-  ENTRY_INDEX = {{}};
-  for(const color of Object.keys(homeStretches)){{
+  ENTRY_INDEX = {};
+  for(const color of Object.keys(homeStretches)){
     const hs0 = homeStretches[color][0];
     let foundIdx = -1;
-    for(let i=0;i<mainPath.length;i++){{
+    for(let i=0;i<mainPath.length;i++){
       const mp = mainPath[i];
       const md = Math.abs(mp[0]-hs0[0]) + Math.abs(mp[1]-hs0[1]);
-      if(md === 1){{ foundIdx = i; break;
-      }}
-    }}
+      if(md === 1){ foundIdx = i; break;
+      }
+    }
     ENTRY_INDEX[color] = foundIdx === -1 ? 0 : foundIdx;
-  }}
-}}
+  }
+}
 
 /* ---------- Expand compact sequences ---------- */
-function expandBetween(a, b){{
+function expandBetween(a, b){
   const [ar,ac] = a; const [br,bc] = b;
   const out = [];
   const dr = br - ar;
   const dc = bc - ac;
-  if(ar === br){{
+  if(ar === br){
     const step = dc > 0 ? 1 : -1;
     for(let cc = ac; cc !== bc + step; cc += step) out.push([ar, cc]);
     return out;
-  }}
-  if(ac === bc){{
+  }
+  if(ac === bc){
     const step = dr > 0 ? 1 : -1;
     for(let rr = ar; rr !== br + step; rr += step) out.push([rr, ac]);
     return out;
-  }}
+  }
   const rowStep = dr > 0 ? 1 : -1;
   const colStep = dc > 0 ? 1 : -1;
   let rr = ar, cc = ac;
-  while(rr !== br){{
+  while(rr !== br){
     out.push([rr, cc]);
     rr += rowStep;
-  }}
+  }
   out.push([rr, cc]);
-  while(cc !== bc){{
+  while(cc !== bc){
     cc += colStep;
     out.push([rr, cc]);
-  }}
+  }
   return out;
-}}
-function expandSequence(seq){{
+}
+function expandSequence(seq){
   if(!Array.isArray(seq) || seq.length === 0) return [];
   const res = [];
   res.push(seq[0].slice());
-  for(let i=1;i<seq.length;i++){{
+  for(let i=1;i<seq.length;i++){
     const prev = res[res.length-1];
     const next = seq[i];
     const expanded = expandBetween(prev, next);
     for(let k=1;k<expanded.length;k++) res.push(expanded[k].slice());
-  }}
+  }
   const uniq = [];
   const seen = new Set();
-  for(const p of res){{
+  for(const p of res){
     const key = p[0]+','+p[1];
-    if(!seen.has(key)){{ uniq.push(p); seen.add(key); }}
-  }}
+    if(!seen.has(key)){ uniq.push(p); seen.add(key); }
+  }
   return uniq;
-}}
+}
 
 /* ---------- Color path building & overrides (customs + filtering) ---------- */
-let colorPaths = {{}};
-let colorIndexMaps = {{}};
+let colorPaths = {};
+let colorIndexMaps = {};
 
-function buildColorPath(startIndex, homeArr){{
+function buildColorPath(startIndex, homeArr){
   const out = [];
   const L = mainPath.length;
   for(let i=0;i<L;i++) out.push(mainPath[(startIndex + i) % L]);
   homeArr.forEach(sq => out.push(sq));
   return out;
-}}
+}
 
-function buildColorPathsAndMaps(){{
+function buildColorPathsAndMaps(){
   // base computed paths
-  colorPaths = {{
+  colorPaths = {
     red: buildColorPath(ENTRY_INDEX.red, homeStretches.red),
     green: buildColorPath(ENTRY_INDEX.green, homeStretches.green),
     blue: buildColorPath(ENTRY_INDEX.blue, homeStretches.blue),
     yellow: buildColorPath(ENTRY_INDEX.yellow, homeStretches.yellow)
-  }};
+  };
 
   /* ---------- RED custom expanded + forbidden filtering ---------- */
   const redCompact = [
@@ -577,7 +579,7 @@ function buildColorPathsAndMaps(){{
   const redToAppend = homeStretches.red.filter(h => !redExpanded.some(rc => rc[0]===h[0] && rc[1]===h[1]));
   const redCombined = redExpanded.concat(redToAppend);
   const forbiddenRed = new Set(['5,5','6,6','6,8','8,6']);
-  colorPaths.red = redCombined.filter(p => !forbiddenRed.has(`${{p[0]}},${{p[1]}}`));
+  colorPaths.red = redCombined.filter(p => !forbiddenRed.has(`${p[0]},${p[1]}`));
 
   /* ---------- BLUE custom ---------- */
   const blueCompact = [
@@ -587,7 +589,7 @@ function buildColorPathsAndMaps(){{
   const blueToAppend = homeStretches.blue.filter(h => !blueExpanded.some(rc => rc[0]===h[0] && rc[1]===h[1]));
   const blueCombined = blueExpanded.concat(blueToAppend);
   const forbiddenBlue = new Set(['8,8','5,5','6,8','8,6','9,9']);
-  colorPaths.blue = blueCombined.filter(p => !forbiddenBlue.has(`${{p[0]}},${{p[1]}}`));
+  colorPaths.blue = blueCombined.filter(p => !forbiddenBlue.has(`${p[0]},${p[1]}`));
 
   /* ---------- GREEN custom ---------- */
   const greenCompact = [
@@ -597,7 +599,7 @@ function buildColorPathsAndMaps(){{
   const greenToAppend = homeStretches.green.filter(h => !greenExpanded.some(rc => rc[0]===h[0] && rc[1]===h[1]));
   const greenCombined = greenExpanded.concat(greenToAppend);
   const forbiddenGreen = new Set(['8,8','5,5','6,8','8,6','9,9']);
-  colorPaths.green = greenCombined.filter(p => !forbiddenGreen.has(`${{p[0]}},${{p[1]}}`));
+  colorPaths.green = greenCombined.filter(p => !forbiddenGreen.has(`${p[0]},${p[1]}`));
 
   /* ---------- YELLOW custom expanded + forbidden filtering ---------- */
   const yellowCompact = [
@@ -606,63 +608,63 @@ function buildColorPathsAndMaps(){{
   ];
   const yellowExpanded = expandSequence(yellowCompact);
   const forbiddenYellow = new Set(['5,5','8,6','6,8','14,8']);
-  const yellowFiltered = yellowExpanded.filter(p => !forbiddenYellow.has(`${{p[0]}},${{p[1]}}`));
+  const yellowFiltered = yellowExpanded.filter(p => !forbiddenYellow.has(`${p[0]},${p[1]}`));
   const yellowToAppend = homeStretches.yellow.filter(h => !yellowFiltered.some(yc => yc[0]===h[0] && yc[1]===h[1]));
   colorPaths.yellow = yellowFiltered.concat(yellowToAppend);
 
   // build index maps for quick lookup
-  colorIndexMaps = {{}};
-  Object.keys(colorPaths).forEach(color=>{{
+  colorIndexMaps = {};
+  Object.keys(colorPaths).forEach(color=>{
     const map = new Map();
-    colorPaths[color].forEach((rc, idx) => map.set(`${{rc[0]}},${{rc[1]}}`, idx));
+    colorPaths[color].forEach((rc, idx) => map.set(`${rc[0]},${rc[1]}`, idx));
     colorIndexMaps[color] = map;
-  }});
-}}
+  });
+}
 
 /* ---------- Numbering helpers ---------- */
-function clearPathNumbers(){{ document.querySelectorAll('.path-number').forEach(n => n.remove()); }}
-function annotateColorPathNumbers(color){{
+function clearPathNumbers(){ document.querySelectorAll('.path-number').forEach(n => n.remove()); }
+function annotateColorPathNumbers(color){
   clearPathNumbers();
   const path = colorPaths[color];
   if(!path) return;
-  path.forEach((rc,i)=>{{
+  path.forEach((rc,i)=>{
     const [r,c]=rc; const cell = cells[r][c];
     const el = document.createElement('div');
     el.className = 'path-number ' + color + (i >= mainPath.length ? ' home' : '');
     el.innerText = String(i);
     cell.appendChild(el);
-  }});
-}}
+  });
+}
 
 /* ---------- STAR positions and helpers ---------- */
 const STAR_SET = new Set(['1,8','1,6','6,1','8,1','13,6','13,8','8,13','6,13']);
-function isStarSquare(r,c){{
-  return STAR_SET.has(`${{r}},${{c}}`);
-}}
+function isStarSquare(r,c){
+  return STAR_SET.has(`${r},${c}`);
+}
 
 /* kept for possible later use */
-function getStarColor(r,c){{
-  const key = `${{r}},${{c}}`;
-  for(const color of ['red','green','blue','yellow']){{
+function getStarColor(r,c){
+  const key = `${r},${c}`;
+  for(const color of ['red','green','blue','yellow']){
     const map = colorIndexMaps[color];
     if(map && map.has(key)) return color;
-  }}
+  }
   return null;
-}}
+}
 
 /* ---------- path index lookup ---------- */
-function getPathIndex(piece){{
+function getPathIndex(piece){
   const color = piece.dataset.colorName;
   const map = colorIndexMaps[color];
   if(!map) return null;
-  const key = `${{Number(piece.dataset.r)}},${{Number(piece.dataset.c)}}`;
+  const key = `${Number(piece.dataset.r)},${Number(piece.dataset.c)}`;
   if(map.has(key)) return map.get(key);
   return null;
-}}
+}
 
 /* ---------- Pieces (draggable) ---------- */
 let pid = 0;
-function createPiece(color, r, c, colorName, pieceIdLabel, pieceNumber){{
+function createPiece(color, r, c, colorName, pieceIdLabel, pieceNumber){
   const p = document.createElement('div'); p.className='piece';
   p.style.background = color;
   p.dataset.id = 'p'+(pid++);
@@ -675,7 +677,7 @@ function createPiece(color, r, c, colorName, pieceIdLabel, pieceNumber){{
   const inner = document.createElement('div'); inner.className='inner-label'; inner.innerText = p.dataset.pieceNumber; p.appendChild(inner);
   const pill = document.createElement('div'); pill.className='count-label'; pill.innerText = '—'; p.appendChild(pill);
 
-  p.addEventListener('dragstart', e=>{{
+  p.addEventListener('dragstart', e=>{
     e.dataTransfer.setData('text/plain', p.dataset.id);
     const clone = p.cloneNode(true); clone.style.position='absolute'; clone.style.left='-1000px'; clone.style.top='-1000px';
     document.body.appendChild(clone);
@@ -684,30 +686,30 @@ function createPiece(color, r, c, colorName, pieceIdLabel, pieceNumber){{
     window._dragId = p.dataset.id; p.classList.add('selected');
     p.dataset._prevTransition = p.style.transition || '';
     p.style.transition = 'none';
-  }});
-  p.addEventListener('dragend', e=>{{
+  });
+  p.addEventListener('dragend', e=>{
     p.classList.remove('selected'); window._dragId = null;
     p.style.transition = p.dataset._prevTransition || 'left 120ms cubic-bezier(.2,.9,.2,1), top 120ms cubic-bezier(.2,.9,.2,1)';
     updatePieceLabel(p); updateScoreboard(); clearHighlights(); clearBehindMarkers();
-  }});
+  });
   p.addEventListener('dblclick', ()=> p.classList.toggle('selected'));
   // click: move if steps selected, else show analysis/highlight
-  p.addEventListener('click', ()=> {{
-    if(selectedSteps !== null){{
+  p.addEventListener('click', ()=> {
+    if(selectedSteps !== null){
       movePieceBy(p, selectedSteps);
       return;
-    }}
+    }
     highlightMoves(p); analyzeBehind(p, 20);
-  }});
+  });
 
   BOARD.appendChild(p);
   // Make initial placement center exactly if the cell is empty
   snapPieceToCell(p, r, c, true);
   return p;
-}}
+}
 
 /* ---------- snapPieceToCell with exactCenter option ---------- */
-function snapPieceToCell(p, r, c, exactCenter = false){{
+function snapPieceToCell(p, r, c, exactCenter = false){
   const cell = cells[r][c];
   const boardRect = BOARD.getBoundingClientRect();
   const cellRect = cell.getBoundingClientRect();
@@ -719,50 +721,50 @@ function snapPieceToCell(p, r, c, exactCenter = false){{
 
   // If exactCenter requested AND target cell is empty -> keep (ox,oy) = (0,0)
   // Otherwise fall back to the stacking / quadrant offsets as before
-  if (!(exactCenter && existing.length === 0)) {{
-    if(existing.length === 1){{ ox = -0.22 * cellRect.width; oy = -0.22 * cellRect.height; }}
-    else if(existing.length === 2){{ ox = 0.22 * cellRect.width; oy = -0.22 * cellRect.height; }}
-    else if(existing.length === 3){{ ox = -0.22 * cellRect.width; oy = 0.22 * cellRect.height; }}
-    else if(existing.length > 3){{ ox = 0.22 * cellRect.width; oy = 0.22 * cellRect.height; }}
+  if (!(exactCenter && existing.length === 0)) {
+    if(existing.length === 1){ ox = -0.22 * cellRect.width; oy = -0.22 * cellRect.height; }
+    else if(existing.length === 2){ ox = 0.22 * cellRect.width; oy = -0.22 * cellRect.height; }
+    else if(existing.length === 3){ ox = -0.22 * cellRect.width; oy = 0.22 * cellRect.height; }
+    else if(existing.length > 3){ ox = 0.22 * cellRect.width; oy = 0.22 * cellRect.height; }
 
     // quadrant / home-area nudges (keep them unless exactCenter requested for an empty cell)
-    if( r>=1 && r<=4 && c>=1 && c<=4 ){{ ox += 0.26 * cellRect.width; }}
-    if( r>=1 && r<=4 && c>=10 && c<=13 ){{ ox += -0.26 * cellRect.width; }}
-    if( r>=10 && r<=13 && c>=10 && c<=13 ){{ ox += -0.12 * cellRect.width; oy += -0.12 * cellRect.height; }}
-  }}
+    if( r>=1 && r<=4 && c>=1 && c<=4 ){ ox += 0.26 * cellRect.width; }
+    if( r>=1 && r<=4 && c>=10 && c<=13 ){ ox += -0.26 * cellRect.width; }
+    if( r>=10 && r<=13 && c>=10 && c<=13 ){ ox += -0.12 * cellRect.width; oy += -0.12 * cellRect.height; }
+  }
 
   // Position (CSS uses translate(-50%,-50%) so left/top should be center coordinates)
   p.style.left = (cx + ox) + 'px';
   p.style.top  = (cy + oy) + 'px';
   p.dataset.r = r; p.dataset.c = c;
   updatePieceLabel(p); updateScoreboard();
-}}
+}
 
 /* ---------- Drag/drop handlers ---------- */
-BOARD.addEventListener('drop', e=>{{
+BOARD.addEventListener('drop', e=>{
   e.preventDefault();
-  if(e.target === BOARD){{
+  if(e.target === BOARD){
     const id = window._dragId || e.dataTransfer.getData('text/plain');
-    const p = BOARD.querySelector(`[data-id="${{id}}"]`);
+    const p = BOARD.querySelector(`[data-id="${id}"]`);
     if(!p) return;
     const br = BOARD.getBoundingClientRect(); const x = e.clientX - br.left; const y = e.clientY - br.top;
     const col = Math.min(N-1, Math.max(0, Math.floor(x / (br.width / N))));
     const row = Math.min(N-1, Math.max(0, Math.floor(y / (br.height / N))));
     snapPieceToCell(p, row, col); clearHighlights(); clearBehindMarkers();
-  }}
-}});
-function handleDropOnCell(e){{
+  }
+});
+function handleDropOnCell(e){
   e.preventDefault();
   const cell = e.currentTarget; const r = Number(cell.dataset.r), c = Number(cell.dataset.c);
   const id = window._dragId || e.dataTransfer.getData('text/plain');
-  const p = BOARD.querySelector(`[data-id="${{id}}"]`);
+  const p = BOARD.querySelector(`[data-id="${id}"]`);
   if(!p) return;
   snapPieceToCell(p, r, c); clearHighlights(); clearBehindMarkers();
-}}
-BOARD.addEventListener('dragover', e => {{
+}
+BOARD.addEventListener('dragover', e => {
   e.preventDefault();
   const id = window._dragId || e.dataTransfer.getData('text/plain');
-  const p = BOARD.querySelector(`[data-id="${{id}}"]`);
+  const p = BOARD.querySelector(`[data-id="${id}"]`);
   if(!p) return;
   const br = BOARD.getBoundingClientRect(); const x = e.clientX - br.left; const y = e.clientY - br.top;
   const col = Math.min(N-1, Math.max(0, Math.floor(x / (br.width / N))));
@@ -771,105 +773,105 @@ BOARD.addEventListener('dragover', e => {{
   const cx = (cellRect.left - br.left) + cellRect.width/2; const cy = (cellRect.top - br.top) + cellRect.height/2;
   const dist = Math.hypot(x - cx, y - cy); const threshold = Math.min(cellRect.width, cellRect.height) * 0.35;
   document.querySelectorAll('.cell.highlight').forEach(x=>x.classList.remove('highlight'));
-  if(dist <= threshold){{ cell.classList.add('highlight'); snapPieceToCell(p, row, col); }} else {{ p.style.left = x + 'px'; p.style.top = y + 'px'; }}
-}});
+  if(dist <= threshold){ cell.classList.add('highlight'); snapPieceToCell(p, row, col); } else { p.style.left = x + 'px'; p.style.top = y + 'px'; }
+});
 
 /* ---------- compute pieces behind one piece (returns counts + details) ---------- */
-function getPiecesBehind(piece, steps = 20){{
+function getPiecesBehind(piece, steps = 20){
   const color = piece.dataset.colorName;
   const r = Number(piece.dataset.r), c = Number(piece.dataset.c);
   const map = colorIndexMaps[color];
   if(!map) return null;
-  const key = `${{r}},${{c}}`;
+  const key = `${r},${c}`;
   if(!map.has(key)) return null;
   const idx = map.get(key);
   const path = colorPaths[color];
   const total = path.length;
 
-  const counts = {{ red:0, green:0, blue:0, yellow:0 }};
+  const counts = { red:0, green:0, blue:0, yellow:0 };
   const distinctSet = new Set();
   const foundDetails = [];
 
-  for(let k=1;k<=steps;k++){{
+  for(let k=1;k<=steps;k++){
     const posIndex = (idx - k + total) % total; // behind positions
     const coord = path[posIndex];
     const occupants = Array.from(document.querySelectorAll('.piece')).filter(p => Number(p.dataset.r) === coord[0] && Number(p.dataset.c) === coord[1]);
-    if(occupants.length > 0){{
-      occupants.forEach(op => {{
+    if(occupants.length > 0){
+      occupants.forEach(op => {
         const col = op.dataset.colorName;
         if(counts.hasOwnProperty(col)) counts[col] += 1;
         distinctSet.add(col);
-      }});
+      });
       // include distance k for scoring
-      foundDetails.push({{ coord: coord.slice(), occupants: occupants.map(o => ({{ id: o.dataset.pieceId, color: o.dataset.colorName }})), distance: k }});
-    }}
-  }}
+      foundDetails.push({ coord: coord.slice(), occupants: occupants.map(o => ({ id: o.dataset.pieceId, color: o.dataset.colorName })), distance: k });
+    }
+  }
 
-  return {{ counts, distinct: distinctSet.size, details: foundDetails, totalFound: foundDetails.reduce((s,d)=>s + d.occupants.length, 0) }};
-}}
+  return { counts, distinct: distinctSet.size, details: foundDetails, totalFound: foundDetails.reduce((s,d)=>s + d.occupants.length, 0) };
+}
 
 /* ---------- compute pieces ahead (before) one piece up to steps (12) ---------- */
-function getPiecesAhead(piece, steps = 12){{
+function getPiecesAhead(piece, steps = 12){
   const color = piece.dataset.colorName;
   const r = Number(piece.dataset.r), c = Number(piece.dataset.c);
   const map = colorIndexMaps[color];
   if(!map) return null;
-  const key = `${{r}},${{c}}`;
+  const key = `${r},${c}`;
   if(!map.has(key)) return null;
   const idx = map.get(key);
   const path = colorPaths[color];
   const total = path.length;
 
-  const counts = {{ red:0, green:0, blue:0, yellow:0 }};
+  const counts = { red:0, green:0, blue:0, yellow:0 };
   const distinctSet = new Set();
   const foundDetails = [];
 
-  for(let k=1;k<=steps;k++){{
+  for(let k=1;k<=steps;k++){
     const posIndex = (idx + k) % total; // ahead positions (forward)
     const coord = path[posIndex];
     const occupants = Array.from(document.querySelectorAll('.piece')).filter(p => Number(p.dataset.r) === coord[0] && Number(p.dataset.c) === coord[1]);
-    if(occupants.length > 0){{
-      occupants.forEach(op => {{
+    if(occupants.length > 0){
+      occupants.forEach(op => {
         const col = op.dataset.colorName;
         if(counts.hasOwnProperty(col)) counts[col] += 1;
         distinctSet.add(col);
-      }});
+      });
       // include distance k for scoring
-      foundDetails.push({{ coord: coord.slice(), occupants: occupants.map(o => ({{ id: o.dataset.pieceId, color: o.dataset.colorName }})), distance: k }});
-    }}
-  }}
+      foundDetails.push({ coord: coord.slice(), occupants: occupants.map(o => ({ id: o.dataset.pieceId, color: o.dataset.colorName })), distance: k });
+    }
+  }
 
-  return {{ counts, distinct: distinctSet.size, details: foundDetails, totalFound: foundDetails.reduce((s,d)=>s + d.occupants.length, 0) }};
-}}
+  return { counts, distinct: distinctSet.size, details: foundDetails, totalFound: foundDetails.reduce((s,d)=>s + d.occupants.length, 0) };
+}
 
 /* ---------- render live panel for all pieces (NO-OP now, removed live counts per request) ---------- */
-function updateBehindAllPanel(){{
+function updateBehindAllPanel(){
   // intentionally left empty: "pieces-live count" panel removed per user request
-}}
+}
 
 /* scroll board so piece is visible & pulse it */
-function scrollToPiece(p){{
+function scrollToPiece(p){
   const rect = p.getBoundingClientRect();
   // small visual pulse
   p.classList.add('selected');
   setTimeout(()=> p.classList.remove('selected'), 700);
-}}
+}
 
 /* ---------- Highlight helpers ---------- */
-function clearHighlights(){{ document.querySelectorAll('.cell.highlight').forEach(x=>x.classList.remove('highlight')); }}
-function clearRouteDots(){{ document.querySelectorAll('.route-dot').forEach(d=>d.remove()); }}
-function clearBehindMarkers(){{ document.querySelectorAll('.behind-dot').forEach(d=>d.remove()); BEHIND_PANEL.style.display='none'; BEHIND_CONTENT.innerHTML=''; }}
+function clearHighlights(){ document.querySelectorAll('.cell.highlight').forEach(x=>x.classList.remove('highlight')); }
+function clearRouteDots(){ document.querySelectorAll('.route-dot').forEach(d=>d.remove()); }
+function clearBehindMarkers(){ document.querySelectorAll('.behind-dot').forEach(d=>d.remove()); BEHIND_PANEL.style.display='none'; BEHIND_CONTENT.innerHTML=''; }
 
 /* ---------- Highlight next 6 (existing helper) ---------- */
-function highlightMoves(p){{
+function highlightMoves(p){
   document.querySelectorAll('.cell.highlight').forEach(x=>x.classList.remove('highlight'));
   const r=Number(p.dataset.r), c=Number(p.dataset.c); const map = colorIndexMaps[p.dataset.colorName];
-  if(!map) return; const idx = map.get(`${{r}},${{c}}`); if(idx === undefined) return;
-  for(let k=1;k<=6;k++){{ const pi = colorPaths[p.dataset.colorName][(idx+k) % colorPaths[p.dataset.colorName].length]; if(pi) cells[pi[0]][pi[1]].classList.add('highlight'); }}
-}}
+  if(!map) return; const idx = map.get(`${r},${c}`); if(idx === undefined) return;
+  for(let k=1;k<=6;k++){ const pi = colorPaths[p.dataset.colorName][(idx+k) % colorPaths[p.dataset.colorName].length]; if(pi) cells[pi[0]][pi[1]].classList.add('highlight'); }
+}
 
 /* ---------- Route dots ---------- */
-function createRouteDot(r,c,color,opacity=0.9){{
+function createRouteDot(r,c,color,opacity=0.9){
   const boardRect = BOARD.getBoundingClientRect();
   const cellRect = cells[r][c].getBoundingClientRect();
   const cx = (cellRect.left - boardRect.left) + cellRect.width/2;
@@ -877,17 +879,17 @@ function createRouteDot(r,c,color,opacity=0.9){{
   const dot = document.createElement('div'); dot.className='route-dot';
   dot.style.left = cx + 'px'; dot.style.top = cy + 'px'; dot.style.background = color; dot.style.opacity = opacity;
   BOARD.appendChild(dot); return dot;
-}}
+}
 
 /* ---------- Behind analyzer (per-click) ---------- */
-function analyzeBehind(piece, steps = 20){{
+function analyzeBehind(piece, steps = 20){
   clearBehindMarkers();
   const behind = getPiecesBehind(piece, steps);
   const ahead = getPiecesAhead(piece, 12);
-  const colorMap = {{ red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' }};
+  const colorMap = { red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' };
 
-  if(behind && behind.details.length){{
-    behind.details.forEach(d => {{
+  if(behind && behind.details.length){
+    behind.details.forEach(d => {
       const [rr,cc] = d.coord;
       const boardRect = BOARD.getBoundingClientRect();
       const cellRect = cells[rr][cc].getBoundingClientRect();
@@ -899,7 +901,7 @@ function analyzeBehind(piece, steps = 20){{
       dot.style.left = cx + 'px'; dot.style.top = cy + 'px';
       dot.style.background = colorMap[firstColor] || 'rgba(0,0,0,0.6)';
       BOARD.appendChild(dot);
-      if(d.occupants.length > 1){{
+      if(d.occupants.length > 1){
         const small = document.createElement('div');
         small.style.position='absolute';
         small.style.left='50%';
@@ -911,12 +913,12 @@ function analyzeBehind(piece, steps = 20){{
         small.style.pointerEvents='none';
         small.innerText = String(d.occupants.length);
         dot.appendChild(small);
-      }}
-    }});
-  }}
+      }
+    });
+  }
 
-  if(ahead && ahead.details.length){{
-    ahead.details.forEach(d => {{
+  if(ahead && ahead.details.length){
+    ahead.details.forEach(d => {
       const [rr,cc] = d.coord;
       const boardRect = BOARD.getBoundingClientRect();
       const cellRect = cells[rr][cc].getBoundingClientRect();
@@ -924,27 +926,27 @@ function analyzeBehind(piece, steps = 20){{
       const cy = (cellRect.top - boardRect.top) + cellRect.height/2;
       const firstColor = d.occupants[0].color || d.occupants[0].colorName;
       createRouteDot(rr,cc, colorMap[firstColor], 0.85);
-    }});
-  }}
+    });
+  }
 
-  showBehindResults({{ behind, ahead }});
-}}
+  showBehindResults({ behind, ahead });
+}
 
 /* display behind + ahead results */
-function showBehindResults(data){{
+function showBehindResults(data){
   BEHIND_CONTENT.innerHTML = '';
-  if(!data){{ BEHIND_PANEL.style.display='none'; return; }}
+  if(!data){ BEHIND_PANEL.style.display='none'; return; }
   BEHIND_PANEL.style.display='block';
   const colors = ['red','green','blue','yellow'];
-  const colorNames = {{ red:'Red', green:'Green', blue:'Blue', yellow:'Yellow' }};
-  const colorHex = {{ red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' }};
+  const colorNames = { red:'Red', green:'Green', blue:'Blue', yellow:'Yellow' };
+  const colorHex = { red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' };
 
   const ahead = data.ahead;
   const aheadTitle = document.createElement('div'); aheadTitle.style.fontWeight='900'; aheadTitle.style.marginBottom='8px';
-  aheadTitle.innerText = `Ahead (up to 12): ${{ahead ? ahead.totalFound : 0}}`;
+  aheadTitle.innerText = `Ahead (up to 12): ${ahead ? ahead.totalFound : 0}`;
   BEHIND_CONTENT.appendChild(aheadTitle);
-  if(ahead){{
-    colors.forEach(col => {{
+  if(ahead){
+    colors.forEach(col => {
       const row = document.createElement('div'); row.className='behind-row';
       const left = document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='8px';
       const dot = document.createElement('span'); dot.style.width='12px'; dot.style.height='12px'; dot.style.borderRadius='50%'; dot.style.display='inline-block';
@@ -954,23 +956,23 @@ function showBehindResults(data){{
       const right = document.createElement('div'); right.innerText = String(ahead.counts[col] || 0);
       row.appendChild(left); row.appendChild(right);
       BEHIND_CONTENT.appendChild(row);
-    }});
+    });
     const summaryA = document.createElement('div'); summaryA.style.marginTop='6px'; summaryA.style.fontWeight='700';
-    summaryA.innerText = `Distinct colors ahead: ${{ahead.distinct}}`;
+    summaryA.innerText = `Distinct colors ahead: ${ahead.distinct}`;
     BEHIND_CONTENT.appendChild(summaryA);
-  }} else {{
+  } else {
     const n = document.createElement('div'); n.style.color='#666'; n.style.marginTop='6px'; n.innerText = 'No ahead data.';
     BEHIND_CONTENT.appendChild(n);
-  }}
+  }
 
   const hr = document.createElement('hr'); hr.style.border='none'; hr.style.height='8px'; hr.style.margin='10px 0'; BEHIND_CONTENT.appendChild(hr);
 
   const behind = data.behind;
   const behindTitle = document.createElement('div'); behindTitle.style.fontWeight='900'; behindTitle.style.marginBottom='8px';
-  behindTitle.innerText = `Behind (up to 20): ${{behind ? behind.totalFound : 0}}`;
+  behindTitle.innerText = `Behind (up to 20): ${behind ? behind.totalFound : 0}`;
   BEHIND_CONTENT.appendChild(behindTitle);
-  if(behind){{
-    colors.forEach(col => {{
+  if(behind){
+    colors.forEach(col => {
       const row = document.createElement('div'); row.className='behind-row';
       const left = document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='8px';
       const dot = document.createElement('span'); dot.style.width='12px'; dot.style.height='12px'; dot.style.borderRadius='50%'; dot.style.display='inline-block';
@@ -980,28 +982,28 @@ function showBehindResults(data){{
       const right = document.createElement('div'); right.innerText = String(behind.counts[col] || 0);
       row.appendChild(left); row.appendChild(right);
       BEHIND_CONTENT.appendChild(row);
-    }});
+    });
     const summaryB = document.createElement('div'); summaryB.style.marginTop='6px'; summaryB.style.fontWeight='700';
-    summaryB.innerText = `Distinct colors behind: ${{behind.distinct}}`;
+    summaryB.innerText = `Distinct colors behind: ${behind.distinct}`;
     BEHIND_CONTENT.appendChild(summaryB);
 
-    if(behind.details.length === 0){{
+    if(behind.details.length === 0){
       const note = document.createElement('div'); note.style.marginTop='6px'; note.style.color='#666'; note.innerText = 'No pieces found within 20 squares behind.';
       BEHIND_CONTENT.appendChild(note);
-    }} else {{
+    } else {
       const detailsWrap = document.createElement('div'); detailsWrap.style.marginTop='8px';
-      behind.details.forEach(d => {{
+      behind.details.forEach(d => {
         const one = document.createElement('div'); one.style.fontSize='12px'; one.style.color='#333';
-        one.innerText = `(${{d.coord[0]}},${{d.coord[1]}}) [d=${{d.distance}}] → ` + d.occupants.map(o => `${{o.id}} (${{o.color}})`).join(', ');
+        one.innerText = `(${d.coord[0]},${d.coord[1]}) [d=${d.distance}] → ` + d.occupants.map(o => `${o.id} (${o.color})`).join(', ');
         detailsWrap.appendChild(one);
-      }});
+      });
       BEHIND_CONTENT.appendChild(detailsWrap);
-    }}
-  }} else {{
+    }
+  } else {
     const n = document.createElement('div'); n.style.color='#666'; n.style.marginTop='6px'; n.innerText = 'No behind data.';
     BEHIND_CONTENT.appendChild(n);
-  }}
-}}
+  }
+}
 
 /* ---------- build board visuals & sample pieces ---------- */
 paintQuads(); paintTrack(); placeHomePlates(); placeCenterTiles();
@@ -1020,43 +1022,43 @@ document.getElementById('btn-red').addEventListener('click', ()=> annotateColorP
 document.getElementById('btn-green').addEventListener('click', ()=> annotateColorPathNumbers('green'));
 document.getElementById('btn-blue').addEventListener('click', ()=> annotateColorPathNumbers('blue'));
 document.getElementById('btn-yellow').addEventListener('click', ()=> annotateColorPathNumbers('yellow'));
-document.getElementById('btn-clear').addEventListener('click', ()=> {{ clearPathNumbers(); clearBehindMarkers(); }});
+document.getElementById('btn-clear').addEventListener('click', ()=> { clearPathNumbers(); clearBehindMarkers(); });
 
 /* ---------- STEP BUTTONS (1..6) ---------- */
 let selectedSteps = null;
 const stepButtons = Array.from(document.querySelectorAll('.step-btn'));
-stepButtons.forEach(btn=>{{
-  btn.addEventListener('click', (e)=>{{
+stepButtons.forEach(btn=>{
+  btn.addEventListener('click', (e)=>{
     const s = Number(btn.dataset.steps);
     // toggle: clicking same number clears selection
-    if(selectedSteps === s){{ selectedSteps = null; updateStepUI(); return; }}
+    if(selectedSteps === s){ selectedSteps = null; updateStepUI(); return; }
     selectedSteps = s;
     updateStepUI();
-  }});
-}});
-function updateStepUI(){{
+  });
+});
+function updateStepUI(){
   stepButtons.forEach(b => b.classList.toggle('active', Number(b.dataset.steps) === selectedSteps));
-}}
+}
 
 /* ---------- Move logic: move piece forward N steps along its color path ---------- */
-function movePieceBy(piece, steps){{
+function movePieceBy(piece, steps){
   if(!piece) return;
   const color = piece.dataset.colorName;
   const path = colorPaths[color];
-  if(!path || path.length === 0) {{
+  if(!path || path.length === 0) {
     // nothing to do
     selectedSteps = null; updateStepUI(); return;
-  }}
+  }
 
   // find current index on color path; if not on path, treat piece as just before entry
   const map = colorIndexMaps[color];
-  const key = `${{Number(piece.dataset.r)}},${{Number(piece.dataset.c)}}`;
+  const key = `${Number(piece.dataset.r)},${Number(piece.dataset.c)}`;
   let curIdx = null;
   if(map && map.has(key)) curIdx = map.get(key);
-  else {{
+  else {
     // treat off-path as just before entry square (so 1 step moves onto entry)
     curIdx = ( (ENTRY_INDEX[color] - 1) + path.length ) % path.length;
-  }}
+  }
 
   const newIdx = (curIdx + steps) % path.length;
   const [nr, nc] = path[newIdx];
@@ -1073,27 +1075,33 @@ function movePieceBy(piece, steps){{
   // show analysis for moved piece
   highlightMoves(piece);
   setTimeout(()=> analyzeBehind(piece, 20), 110);
-}}
+}
 
 /* interactions */
-BOARD.addEventListener('click', e=>{{
+BOARD.addEventListener('click', e=>{
   const p = e.target.closest('.piece');
-  if(p) {{
+  if(p) {
     // piece clicks handled inside createPiece (will move if steps selected)
     return;
-  }} else {{
+  } else {
     // click on empty board -> clear selections/highlights
     selectedSteps = null; updateStepUI();
     clearHighlights(); clearRouteDots(); clearBehindMarkers();
-  }}
-}});
-window.addEventListener('resize', ()=> {{ document.querySelectorAll('.piece').forEach(p => snapPieceToCell(p, Number(p.dataset.r), Number(p.dataset.c))); }});
+  }
+});
+window.addEventListener('resize', ()=> { document.querySelectorAll('.piece').forEach(p => snapPieceToCell(p, Number(p.dataset.r), Number(p.dataset.c))); });
 
 /* ---------- Scoreboard update ---------- */
-function updateScoreboard(){{ updateBehindAllPanel(); updateScorePanel(); }}
+function updateScoreboard(){ updateBehindAllPanel(); updateScorePanel(); }
 
-/* ---------- UPDATED: updatePieceLabel (applies no reductions when piece is in last-6) ---------- */
-function updatePieceLabel(piece){{
+/* ---------- UPDATED: updatePieceLabel (applies no reductions when piece is in last-6) ----------
+   - distance reductions:
+     * 1..6  => 45%
+     * 7..10 => 30%
+     * 11..20=> 15%
+   - If piece is on its last 6 path squares, reductions are NOT applied.
+*/
+function updatePieceLabel(piece){
   const pill = piece.querySelector('.count-label');
   const pathIdx = getPathIndex(piece);
   const r = Number(piece.dataset.r), c = Number(piece.dataset.c);
@@ -1105,31 +1113,31 @@ function updatePieceLabel(piece){{
   let baseScore = 0;
 
   // RULE: if not on its color path => -6
-  if(pathIdx === null){{
+  if(pathIdx === null){
     baseScore = -6;
-  }} else {{
+  } else {
     // if piece is in the central 3x3 => +100
-    if(inCentral3x3){{
+    if(inCentral3x3){
       baseScore = 100;
-    }} else {{
+    } else {
       const color = piece.dataset.colorName;
 
       // if piece is exactly on its color's starting square, assign 0
       const startCoord = colorPaths[color] && colorPaths[color][0];
-      if(startCoord && startCoord[0] === r && startCoord[1] === c){{
+      if(startCoord && startCoord[0] === r && startCoord[1] === c){
         baseScore = 0;
-      }} else {{
+      } else {
         // STAR RULE: if the square is a star AND it's not the piece's starting square, give +50.
         let starBonus = 0;
-        if(isStarSquare(r,c)){{
-          if(!(startCoord && startCoord[0] === r && startCoord[1] === c)){{
+        if(isStarSquare(r,c)){
+          if(!(startCoord && startCoord[0] === r && startCoord[1] === c)){
             starBonus = 50;
-          }}
-        }}
+          }
+        }
         baseScore = pathIdx + starBonus;
-      }}
-    }}
-  }}
+      }
+    }
+  }
 
   // ---------- Proximity / ahead scoring (kept positive as before) ----------
   const AHEAD_WEIGHT = 1.0;  // directly proportional multiplier (kept from earlier)
@@ -1137,16 +1145,16 @@ function updatePieceLabel(piece){{
 
   const ahead = getPiecesAhead(piece, 12);
   const selfColor = piece.dataset.colorName;
-  if(ahead && ahead.details.length){{
-    ahead.details.forEach(d => {{
+  if(ahead && ahead.details.length){
+    ahead.details.forEach(d => {
       const dist = d.distance || 1;
-      d.occupants.forEach(o => {{
-        if(o.color !== selfColor){{
+      d.occupants.forEach(o => {
+        if(o.color !== selfColor){
           aheadScore += AHEAD_WEIGHT * dist;
-        }}
-      }});
-    }});
-  }}
+        }
+      });
+    });
+  }
 
   // provisional score before behind reductions
   const provisional = baseScore + Math.round(aheadScore);
@@ -1159,34 +1167,34 @@ function updatePieceLabel(piece){{
   let totalReductionPercent = 0.0; // sum of percentages (e.g. 0.45 + 0.30 + ...)
   const behind = getPiecesBehind(piece, 20);
   let behindDetailsCount = 0;
-  if(behind && behind.details.length){{
-    behind.details.forEach(d => {{
+  if(behind && behind.details.length){
+    behind.details.forEach(d => {
       const dist = d.distance || 1;
-      d.occupants.forEach(o => {{
-        if(o.color !== selfColor){{
+      d.occupants.forEach(o => {
+        if(o.color !== selfColor){
           behindDetailsCount += 1;
           let pct = 0;
           if(dist >= 1 && dist <= 6) pct = 0.45;
           else if(dist >= 7 && dist <= 10) pct = 0.30;
           else if(dist >= 11 && dist <= 20) pct = 0.15;
           totalReductionPercent += pct;
-        }}
-      }});
-    }});
-  }}
+        }
+      });
+    });
+  }
 
   // ---------- NEW RULE: if this piece is on any of its last 6 path squares -> NO REDUCTION ----------
   let isOnLastSix = false;
-  if(pathIdx !== null){{
+  if(pathIdx !== null){
     const pathArr = colorPaths[piece.dataset.colorName];
-    if(Array.isArray(pathArr) && pathArr.length >= 6){{
+    if(Array.isArray(pathArr) && pathArr.length >= 6){
       isOnLastSix = (pathIdx >= (pathArr.length - 6));
-    }}
-  }}
-  if(isOnLastSix){{
+    }
+  }
+  if(isOnLastSix){
     // override: zero out reductions
     totalReductionPercent = 0.0;
-  }}
+  }
 
   // compute the actual reduction amount and final total
   const reductionAmount = Math.round(provisional * totalReductionPercent);
@@ -1195,77 +1203,89 @@ function updatePieceLabel(piece){{
   // update pill text and add a hover breakdown
   pill.innerText = String(finalTotal);
   pill.title =
-    `base ${{baseScore}}  + ahead ${{Math.round(aheadScore)}}  = provisional ${{provisional}}\n` +
+    `base ${baseScore}  + ahead ${Math.round(aheadScore)}  = provisional ${provisional}\n` +
     (isOnLastSix
-      ? `on last-6: no behind reductions applied\nfinal ${{finalTotal}}`
-      : `behindPieces ${{behindDetailsCount}}  -> reduction% ${{Math.round(totalReductionPercent * 100)}}%  = -${{reductionAmount}}\nfinal ${{finalTotal}}`
+      ? `on last-6: no behind reductions applied\nfinal ${finalTotal}`
+      : `behindPieces ${behindDetailsCount}  -> reduction% ${Math.round(totalReductionPercent * 100)}%  = -${reductionAmount}\nfinal ${finalTotal}`
     );
 
   // return numeric score for convenience (used by score panel)
   return finalTotal;
-}}
+}
 
 /* ---------- Probability helpers ---------- */
-function computeWinProbabilities(totalsObj, opts = {{}}) {{
+/**
+ * computeWinProbabilities(totalsObj, opts)
+ * - totalsObj: { red, green, blue, yellow } numeric totals
+ * - opts:
+ *    method: 'softmax' (default) | 'linear'
+ *    temperature: number > 0 (softmax temperature; default 1)
+ * Returns { red, green, blue, yellow } probabilities summing to 1.
+ */
+function computeWinProbabilities(totalsObj, opts = {}) {
   const method = opts.method || 'softmax';
   const temp = (typeof opts.temperature === 'number' && opts.temperature > 0) ? opts.temperature : 1.0;
 
   const keys = ['red','green','blue','yellow'];
   const vals = keys.map(k => Number(totalsObj[k] || 0));
 
-  if(method === 'linear') {{
+  if(method === 'linear') {
+    // ensure non-negative; shift if all negative
     const minv = Math.min(...vals);
     const shifted = vals.map(v => v - Math.min(0, minv));
     const sum = shifted.reduce((s,x) => s + x, 0);
-    if(sum === 0) {{
-      return {{ red:0.25, green:0.25, blue:0.25, yellow:0.25 }};
-    }}
+    if(sum === 0) {
+      // fallback to equal probabilities
+      return { red:0.25, green:0.25, blue:0.25, yellow:0.25 };
+    }
     const probs = shifted.map(x => x / sum);
-    return keys.reduce((acc,k,i) => (acc[k] = probs[i], acc), {{}});
-  }}
+    return keys.reduce((acc,k,i) => (acc[k] = probs[i], acc), {});
+  }
 
   // default: softmax
+  // To avoid overflow/underflow, subtract max before exp
   const maxv = Math.max(...vals);
   const exps = vals.map(v => Math.exp((v - maxv) / temp));
   const sumExps = exps.reduce((s,x) => s + x, 0);
-  if(sumExps === 0) {{
-    return {{ red:0.25, green:0.25, blue:0.25, yellow:0.25 }};
-  }}
+  if(sumExps === 0) {
+    return { red:0.25, green:0.25, blue:0.25, yellow:0.25 };
+  }
   const probs = exps.map(e => e / sumExps);
-  return keys.reduce((acc,k,i) => (acc[k] = probs[i], acc), {{}});
-}}
+  return keys.reduce((acc,k,i) => (acc[k] = probs[i], acc), {});
+}
 
 /* ---------- NEW: update left score panel (per-piece list + per-color sums + probabilities for sidebar) ---------- */
-function updateScorePanel(){{
+function updateScorePanel(){
   SCORES_LIST.innerHTML = '';
 
   // totals by color
-  const totals = {{ red:0, green:0, blue:0, yellow:0 }};
+  const totals = { red:0, green:0, blue:0, yellow:0 };
 
   const pieces = Array.from(document.querySelectorAll('.piece'));
   // sort by color then pieceId for stable order
-  pieces.sort((a,b) => {{
+  pieces.sort((a,b) => {
     if(a.dataset.colorName === b.dataset.colorName) return a.dataset.pieceId.localeCompare(b.dataset.pieceId);
     return a.dataset.colorName.localeCompare(b.dataset.colorName);
-  }});
+  });
 
-  pieces.forEach(p => {{
+  pieces.forEach(p => {
     // recompute label & get numeric value
     const score = updatePieceLabel(p);
-    if(typeof score === 'number' && !isNaN(score)){{
-      if(totals.hasOwnProperty(p.dataset.colorName)){{
+    if(typeof score === 'number' && !isNaN(score)){
+      if(totals.hasOwnProperty(p.dataset.colorName)){
         totals[p.dataset.colorName] += score;
-      }}
-    }}
+      }
+    }
 
     const row = document.createElement('div'); row.className = 'score-row';
     const left = document.createElement('div'); left.className = 'score-left';
     const dot = document.createElement('div'); dot.className = 'color-dot-small';
-    const colorHex = {{ red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' }};
+    // color by piece color name
+    const colorHex = { red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' };
     dot.style.background = colorHex[p.dataset.colorName] || '#ccc';
     const nameWrap = document.createElement('div');
-    const name = document.createElement('div'); name.innerText = `${{p.dataset.pieceId}}`; name.style.fontWeight='800';
-    const meta = document.createElement('div'); meta.className='score-meta'; meta.innerText = `${{p.dataset.colorName}} • (${{p.dataset.r}},${{p.dataset.c}})`;
+    const name = document.createElement('div'); name.innerText = `${p.dataset.pieceId}`; name.style.fontWeight='800';
+    const meta = document.createElement('div'); meta.className='score-meta'; meta.innerText = `${p.dataset.colorName} • (${p.dataset.r},${p.dataset.c})`;
     nameWrap.appendChild(name); nameWrap.appendChild(meta);
 
     left.appendChild(dot); left.appendChild(nameWrap);
@@ -1274,9 +1294,9 @@ function updateScorePanel(){{
 
     row.appendChild(left); row.appendChild(right);
     row.style.cursor = 'pointer';
-    row.addEventListener('click', ()=> {{ highlightMoves(p); analyzeBehind(p,20); scrollToPiece(p); }});
+    row.addEventListener('click', ()=> { highlightMoves(p); analyzeBehind(p,20); scrollToPiece(p); });
     SCORES_LIST.appendChild(row);
-  }});
+  });
 
   // update totals UI (show as integers)
   TOTAL_RED_EL.innerText = String(Math.round(totals.red));
@@ -1287,7 +1307,7 @@ function updateScorePanel(){{
   // compute probabilities and update sidebar visuals
   const method = PROB_METHOD_SEL.value || 'softmax';
   const temp = Number(PROB_TEMP_INPUT.value) || 1.0;
-  const probs = computeWinProbabilities(totals, {{ method, temperature: temp }});
+  const probs = computeWinProbabilities(totals, { method, temperature: temp });
 
   // update fills + text
   const toPct = v => Math.max(0, Math.min(100, v * 100));
@@ -1300,7 +1320,7 @@ function updateScorePanel(){{
   PCT_GREEN.innerText  = (probs.green* 100).toFixed(1) + '%';
   PCT_BLUE.innerText   = (probs.blue * 100).toFixed(1) + '%';
   PCT_YELLOW.innerText = (probs.yellow*100).toFixed(1) + '%';
-}}
+}
 
 /* ---------- initial scoreboard */
 updateScoreboard();
@@ -1309,43 +1329,47 @@ console.log('ENTRY_INDEX (auto) =', ENTRY_INDEX);
 
 /* UI helpers for manual refresh */
 document.getElementById('refresh-scores').addEventListener('click', ()=> updateScoreboard());
-document.getElementById('reset-scores-visibility').addEventListener('click', ()=> {{
+document.getElementById('reset-scores-visibility').addEventListener('click', ()=> {
+  // recompute paths and redraw
   computeMainPathAndEntries();
   buildColorPathsAndMaps();
   updateScoreboard();
-}});
+});
 
 /* probability controls */
 PROB_METHOD_SEL.addEventListener('change', ()=> updateScorePanel());
-PROB_TEMP_INPUT.addEventListener('input', ()=> {{
+PROB_TEMP_INPUT.addEventListener('input', ()=> {
   PROB_TEMP_VAL.innerText = Number(PROB_TEMP_INPUT.value).toFixed(1);
   updateScorePanel();
-}});
+});
 
 /* keep scoreboard updated during interactions */
-const observer = new MutationObserver(()=> {{ updateScoreboard(); }});
-observer.observe(BOARD, {{ attributes:true, subtree:true, attributeFilter:['style','data-r','data-c'] }});
+const observer = new MutationObserver(()=> { updateScoreboard(); });
+observer.observe(BOARD, { attributes:true, subtree:true, attributeFilter:['style','data-r','data-c'] });
 
 // Initialize the embedded controls from Streamlit sidebar values
-(function initFromStreamlit(){{
-  try{{
+(function initFromStreamlit(){
+  try{
     const methodElem = document.getElementById('prob-method');
     const tempElem = document.getElementById('prob-temp');
-    methodElem.value = '{prob_method}';
-    tempElem.value = {prob_temp};
-    document.getElementById('prob-temp-val').innerText = Number({prob_temp}).toFixed(1);
+    // placeholders replaced by Python before rendering:
+    methodElem.value = "__PROB_METHOD__";
+    tempElem.value = "__PROB_TEMP__";
+    document.getElementById('prob-temp-val').innerText = Number("__PROB_TEMP__").toFixed(1);
     methodElem.dispatchEvent(new Event('change'));
     tempElem.dispatchEvent(new Event('input'));
     updateScoreboard();
-  }}catch(e){{ console.warn('initFromStreamlit failed', e); }}
-}})();
-
+  }catch(e){ console.warn('initFromStreamlit failed', e); }
+})();
 </script>
 </body>
 </html>
 '''
 
-# Render the embedded HTML. Adjust height as needed.
+# Replace the two placeholders with values from Streamlit controls.
+html_app = html_template.replace("__PROB_METHOD__", prob_method).replace("__PROB_TEMP__", str(prob_temp))
+
+# Embed into the Streamlit app
 st_html(html_app, height=880, scrolling=True)
 
 st.markdown("---")
