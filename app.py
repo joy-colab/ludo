@@ -7,7 +7,7 @@ st.set_page_config(page_title="Ludo Analyzer", layout="wide")
 st.title("Ludo — Score panel with color sums + probabilities")
 st.write("Interactive Ludo board wrapped in a Streamlit app. Use the sidebar to adjust probability method and temperature.")
 
-# Sidebar controls (these are also exposed inside the embedded HTML but we expose them here for convenience)
+# Sidebar controls
 prob_method = st.sidebar.selectbox("Probability method", ["softmax", "linear"], index=0)
 prob_temp = st.sidebar.slider("Softmax temperature", min_value=0.2, max_value=5.0, value=1.0, step=0.1)
 
@@ -211,10 +211,10 @@ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:c
     <!-- Color totals: Red / Green / Blue / Yellow -->
     <div class="totals-wrap" id="color-totals">
       <div style="font-weight:800;margin-bottom:6px">Color totals</div>
-      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"><span style="width:12px;height:12px;background:#ef4444;border-radius:3px;display:inline-block"></span> Red</div><div class="val" id="total-red">0</div></div>
-      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"><span style="width:12px;height:12px;background:#10b981;border-radius:3px;display:inline-block"></span> Green</div><div class="val" id="total-green">0</div></div>
-      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"><span style="width:12px;height:12px;background:#2563eb;border-radius:3px;display:inline-block"></span> Blue</div><div class="val" id="total-blue">0</div></div>
-      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"><span style="width:12px;height:12px;background:#f59e0b;border-radius:3px;display:inline-block"></span> Yellow</div><div class="val" id="total-yellow">0</div></div>
+      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"></div><div class="val" id="total-red">0</div></div>
+      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"></div><div class="val" id="total-green">0</div></div>
+      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"></div><div class="val" id="total-blue">0</div></div>
+      <div class="totals-row"><div class="label" style="display:flex;gap:8px;align-items:center;"></div><div class="val" id="total-yellow">0</div></div>
     </div>
 
     <div id="scores-list"></div>
@@ -1094,13 +1094,7 @@ window.addEventListener('resize', ()=> { document.querySelectorAll('.piece').for
 /* ---------- Scoreboard update ---------- */
 function updateScoreboard(){ updateBehindAllPanel(); updateScorePanel(); }
 
-/* ---------- UPDATED: updatePieceLabel (applies no reductions when piece is in last-6) ----------
-   - distance reductions:
-     * 1..6  => 45%
-     * 7..10 => 30%
-     * 11..20=> 15%
-   - If piece is on its last 6 path squares, reductions are NOT applied.
-*/
+/* ---------- RESTORED: updatePieceLabel (original point system, NO behind reductions) ---------- */
 function updatePieceLabel(piece){
   const pill = piece.querySelector('.count-label');
   const pathIdx = getPathIndex(piece);
@@ -1109,7 +1103,7 @@ function updatePieceLabel(piece){
   // central 3x3 check (rows 6..8, cols 6..8)
   const inCentral3x3 = (r >= 6 && r <= 8 && c >= 6 && c <= 8);
 
-  // compute baseScore (do NOT return early — we'll add proximity / reductions below)
+  // compute baseScore (do NOT return early — we'll add proximity below)
   let baseScore = 0;
 
   // RULE: if not on its color path => -6
@@ -1140,7 +1134,7 @@ function updatePieceLabel(piece){
   }
 
   // ---------- Proximity / ahead scoring (kept positive as before) ----------
-  const AHEAD_WEIGHT = 1.0;  // directly proportional multiplier (kept from earlier)
+  const AHEAD_WEIGHT = 1.0;  // directly proportional multiplier (same as before)
   let aheadScore = 0;
 
   const ahead = getPiecesAhead(piece, 12);
@@ -1156,72 +1150,20 @@ function updatePieceLabel(piece){
     });
   }
 
-  // provisional score before behind reductions
+  // final total = baseScore + aheadScore (rounded)
   const provisional = baseScore + Math.round(aheadScore);
+  const finalTotal = Math.round(provisional);
 
-  // ---------- NEW: behind reductions by percentage (per your request) ----------
-  // distance -> percent mapping:
-  // 1..6  => 45%
-  // 7..10 => 30%
-  // 11..20=> 15%
-  let totalReductionPercent = 0.0; // sum of percentages (e.g. 0.45 + 0.30 + ...)
-  const behind = getPiecesBehind(piece, 20);
-  let behindDetailsCount = 0;
-  if(behind && behind.details.length){
-    behind.details.forEach(d => {
-      const dist = d.distance || 1;
-      d.occupants.forEach(o => {
-        if(o.color !== selfColor){
-          behindDetailsCount += 1;
-          let pct = 0;
-          if(dist >= 1 && dist <= 6) pct = 0.45;
-          else if(dist >= 7 && dist <= 10) pct = 0.30;
-          else if(dist >= 11 && dist <= 20) pct = 0.15;
-          totalReductionPercent += pct;
-        }
-      });
-    });
-  }
-
-  // ---------- NEW RULE: if this piece is on any of its last 6 path squares -> NO REDUCTION ----------
-  let isOnLastSix = false;
-  if(pathIdx !== null){
-    const pathArr = colorPaths[piece.dataset.colorName];
-    if(Array.isArray(pathArr) && pathArr.length >= 6){
-      isOnLastSix = (pathIdx >= (pathArr.length - 6));
-    }
-  }
-  if(isOnLastSix){
-    // override: zero out reductions
-    totalReductionPercent = 0.0;
-  }
-
-  // compute the actual reduction amount and final total
-  const reductionAmount = Math.round(provisional * totalReductionPercent);
-  let finalTotal = Math.round(provisional - reductionAmount);
-
-  // update pill text and add a hover breakdown
+  // update pill text and hover breakdown (clear, concise)
   pill.innerText = String(finalTotal);
   pill.title =
-    `base ${baseScore}  + ahead ${Math.round(aheadScore)}  = provisional ${provisional}\n` +
-    (isOnLastSix
-      ? `on last-6: no behind reductions applied\nfinal ${finalTotal}`
-      : `behindPieces ${behindDetailsCount}  -> reduction% ${Math.round(totalReductionPercent * 100)}%  = -${reductionAmount}\nfinal ${finalTotal}`
-    );
+    `base ${baseScore}  + ahead ${Math.round(aheadScore)}  = final ${finalTotal}`;
 
   // return numeric score for convenience (used by score panel)
   return finalTotal;
 }
 
 /* ---------- Probability helpers ---------- */
-/**
- * computeWinProbabilities(totalsObj, opts)
- * - totalsObj: { red, green, blue, yellow } numeric totals
- * - opts:
- *    method: 'softmax' (default) | 'linear'
- *    temperature: number > 0 (softmax temperature; default 1)
- * Returns { red, green, blue, yellow } probabilities summing to 1.
- */
 function computeWinProbabilities(totalsObj, opts = {}) {
   const method = opts.method || 'softmax';
   const temp = (typeof opts.temperature === 'number' && opts.temperature > 0) ? opts.temperature : 1.0;
@@ -1230,20 +1172,16 @@ function computeWinProbabilities(totalsObj, opts = {}) {
   const vals = keys.map(k => Number(totalsObj[k] || 0));
 
   if(method === 'linear') {
-    // ensure non-negative; shift if all negative
     const minv = Math.min(...vals);
     const shifted = vals.map(v => v - Math.min(0, minv));
     const sum = shifted.reduce((s,x) => s + x, 0);
     if(sum === 0) {
-      // fallback to equal probabilities
       return { red:0.25, green:0.25, blue:0.25, yellow:0.25 };
     }
     const probs = shifted.map(x => x / sum);
     return keys.reduce((acc,k,i) => (acc[k] = probs[i], acc), {});
   }
 
-  // default: softmax
-  // To avoid overflow/underflow, subtract max before exp
   const maxv = Math.max(...vals);
   const exps = vals.map(v => Math.exp((v - maxv) / temp));
   const sumExps = exps.reduce((s,x) => s + x, 0);
@@ -1262,14 +1200,12 @@ function updateScorePanel(){
   const totals = { red:0, green:0, blue:0, yellow:0 };
 
   const pieces = Array.from(document.querySelectorAll('.piece'));
-  // sort by color then pieceId for stable order
   pieces.sort((a,b) => {
     if(a.dataset.colorName === b.dataset.colorName) return a.dataset.pieceId.localeCompare(b.dataset.pieceId);
     return a.dataset.colorName.localeCompare(b.dataset.colorName);
   });
 
   pieces.forEach(p => {
-    // recompute label & get numeric value
     const score = updatePieceLabel(p);
     if(typeof score === 'number' && !isNaN(score)){
       if(totals.hasOwnProperty(p.dataset.colorName)){
@@ -1280,7 +1216,6 @@ function updateScorePanel(){
     const row = document.createElement('div'); row.className = 'score-row';
     const left = document.createElement('div'); left.className = 'score-left';
     const dot = document.createElement('div'); dot.className = 'color-dot-small';
-    // color by piece color name
     const colorHex = { red:'#ef4444', green:'#10b981', blue:'#2563eb', yellow:'#f59e0b' };
     dot.style.background = colorHex[p.dataset.colorName] || '#ccc';
     const nameWrap = document.createElement('div');
@@ -1298,18 +1233,15 @@ function updateScorePanel(){
     SCORES_LIST.appendChild(row);
   });
 
-  // update totals UI (show as integers)
   TOTAL_RED_EL.innerText = String(Math.round(totals.red));
   TOTAL_GREEN_EL.innerText = String(Math.round(totals.green));
   TOTAL_BLUE_EL.innerText = String(Math.round(totals.blue));
   TOTAL_YELLOW_EL.innerText = String(Math.round(totals.yellow));
 
-  // compute probabilities and update sidebar visuals
   const method = PROB_METHOD_SEL.value || 'softmax';
   const temp = Number(PROB_TEMP_INPUT.value) || 1.0;
   const probs = computeWinProbabilities(totals, { method, temperature: temp });
 
-  // update fills + text
   const toPct = v => Math.max(0, Math.min(100, v * 100));
   FILL_RED.style.width    = toPct(probs.red) + '%';
   FILL_GREEN.style.width  = toPct(probs.green) + '%';
@@ -1330,7 +1262,6 @@ console.log('ENTRY_INDEX (auto) =', ENTRY_INDEX);
 /* UI helpers for manual refresh */
 document.getElementById('refresh-scores').addEventListener('click', ()=> updateScoreboard());
 document.getElementById('reset-scores-visibility').addEventListener('click', ()=> {
-  // recompute paths and redraw
   computeMainPathAndEntries();
   buildColorPathsAndMaps();
   updateScoreboard();
@@ -1352,7 +1283,6 @@ observer.observe(BOARD, { attributes:true, subtree:true, attributeFilter:['style
   try{
     const methodElem = document.getElementById('prob-method');
     const tempElem = document.getElementById('prob-temp');
-    // placeholders replaced by Python before rendering:
     methodElem.value = "__PROB_METHOD__";
     tempElem.value = "__PROB_TEMP__";
     document.getElementById('prob-temp-val').innerText = Number("__PROB_TEMP__").toFixed(1);
